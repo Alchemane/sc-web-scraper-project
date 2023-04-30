@@ -1,2 +1,1 @@
-# sc-web-scraper-project
-A project in Python that I'm working on for my own convenience and fun.
+this project is a novice coders work. written in python and makes use of python libraries such as selenium, bs4 and pyside6, it uses a chrome browser instance to simulate your soundcloud liked page to load all dynamic elements and scrape and download your liked songs straight to your computer. if you hate soundcloud artists always privating and deleting their songs, archive them. im sure you fellow data hoarders will like this one.
