@@ -155,78 +155,25 @@ class SeleniumScraper():
                     link = "Unknown"
                     print('Selenium Browser: Error - Link is unknown')
 
-                playlist_div = song_element.find('div', {'class': 'sound playlist streamContext'})
-                # Element is a track
-                if not playlist_div:
-                    print('Selenium Browser: Element is a track')
-                    # Extract title
-                    title_element = song_element.select_one('.soundTitle__title')
-                    if title_element is not None:
-                        title = title_element.text.strip()
-                    else:
-                        title = "Unknown"
-                        print('Selenium Browser: Error - Title is unknown')
-                    # Extract artist
-                    artist_element = song_element.find('a', {'class': 'soundTitle__username'})
-                    if artist_element is not None:
-                        artist = artist_element.text.strip()
-                    else:
-                        artist = "Unknown"
-                        print('Selenium Browser: Error - Artist is unknown')
-
-                    scraped_data = f'Title: {title}\nArtist: {artist}\nLink: {link}\n'
-                    print('Selenium Browser: ' + scraped_data)
-                    # Append link and metadata of track to be downloaded
-                    links.append(link)
-                    metadata.append((title, artist))
-                    data.append(scraped_data)
-                # Element is a playlist
-                else:
-                    print('Selenium Browser: Element is a playlist')
-                    # Open new tab
-                    driver.execute_script("window.open('');")
-                    # switch to new tab
-                    driver.switch_to.window(driver.window_handles[1])
-                    # Load playlist URL
-                    driver.get(link)
-                    # scroll down to load all songs
-                    while True:
-                        # scroll to bottom of page
-                        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-                        # wait for page to load
-                        time.sleep(1)
-                        # check if end of page is reached
-                        end_of_page = driver.execute_script("return window.innerHeight + window.pageYOffset >= document.body.scrollHeight;")
-                        if end_of_page:
-                            break
-                    # Scrape song information in new tab
-                    new_soup = BeautifulSoup(driver.page_source, 'html.parser')
-                    new_song_elements = new_soup.find_all('li', {'class': 'trackList__item'})
-                    # Extract song information from playlist page
-                    for new_song_element in new_song_elements:
+                if link not in links:
+                    playlist_div = song_element.find('div', {'class': 'sound playlist streamContext'})
+                    # Element is a track
+                    if not playlist_div:
+                        print('Selenium Browser: Element is a track')
                         # Extract title
-                        title_element = new_song_element.select_one('.trackItem__trackTitle')
+                        title_element = song_element.select_one('.soundTitle__title')
                         if title_element is not None:
                             title = title_element.text.strip()
                         else:
                             title = "Unknown"
                             print('Selenium Browser: Error - Title is unknown')
-                        
-                        # Extract artist from the soundTitle__titleContainer element
-                        artist_element = soup.select_one('.soundTitle__username > span:nth-of-type(1)')
+                        # Extract artist
+                        artist_element = song_element.find('a', {'class': 'soundTitle__username'})
                         if artist_element is not None:
                             artist = artist_element.text.strip()
                         else:
                             artist = "Unknown"
                             print('Selenium Browser: Error - Artist is unknown')
-
-                        # Extract link for the playlist element
-                        link_element = new_song_element.find('a', {'class': 'trackItem__trackTitle'})
-                        if link_element is not None:
-                            link = 'https://soundcloud.com' + link_element.get('href')
-                        else:
-                            link = "Unknown"
-                            print('Selenium Browser: Error - Link is unknown')
 
                         scraped_data = f'Title: {title}\nArtist: {artist}\nLink: {link}\n'
                         print('Selenium Browser: ' + scraped_data)
@@ -234,6 +181,64 @@ class SeleniumScraper():
                         links.append(link)
                         metadata.append((title, artist))
                         data.append(scraped_data)
+                    # Element is a playlist
+                    else:
+                        print('Selenium Browser: Element is a playlist')
+                        # Open new tab
+                        driver.execute_script("window.open('');")
+                        # switch to new tab
+                        driver.switch_to.window(driver.window_handles[1])
+                        # Load playlist URL
+                        driver.get(link)
+                        # scroll down to load all songs
+                        while True:
+                            # scroll to bottom of page
+                            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                            # wait for page to load
+                            time.sleep(1)
+                            # check if end of page is reached
+                            end_of_page = driver.execute_script("return window.innerHeight + window.pageYOffset >= document.body.scrollHeight;")
+                            if end_of_page:
+                                break
+                        # Scrape song information in new tab
+                        new_soup = BeautifulSoup(driver.page_source, 'html.parser')
+                        new_song_elements = new_soup.find_all('li', {'class': 'trackList__item'})
+                        # Extract song information from playlist page
+                        for new_song_element in new_song_elements:
+                            # Extract title
+                            title_element = new_song_element.select_one('.trackItem__trackTitle')
+                            if title_element is not None:
+                                title = title_element.text.strip()
+                            else:
+                                title = "Unknown"
+                                print('Selenium Browser: Error - Title is unknown')
+                            
+                            # Extract artist from the soundTitle__titleContainer element
+                            artist_element = soup.select_one('.soundTitle__username > span:nth-of-type(1)')
+                            if artist_element is not None:
+                                artist = artist_element.text.strip()
+                            else:
+                                artist = "Unknown"
+                                print('Selenium Browser: Error - Artist is unknown')
+
+                            # Extract link for the playlist element
+                            link_element = new_song_element.find('a', {'class': 'trackItem__trackTitle'})
+                            if link_element is not None:
+                                link = 'https://soundcloud.com' + link_element.get('href')
+                            else:
+                                link = "Unknown"
+                                print('Selenium Browser: Error - Link is unknown')
+
+                            scraped_data = f'Title: {title}\nArtist: {artist}\nLink: {link}\n'
+                            print('Selenium Browser: ' + scraped_data)
+                            # Append link and metadata of track to be downloaded
+                            links.append(link)
+                            metadata.append((title, artist))
+                            data.append(scraped_data)
+                else:
+                    # Duplicate detected, element has already been scraped
+                    print(f'Selenium Browser: {link} has already been scraped. Skipping...\n')
+                    continue
 
                 # Close new tab
                 if driver.current_window_handle != original_window:
