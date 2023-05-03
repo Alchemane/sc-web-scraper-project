@@ -3,17 +3,53 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QLineEdit, QVBoxLayout, QPushButton, QHBoxLayout
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QLineEdit, QVBoxLayout, QPushButton, QHBoxLayout, QPlainTextEdit
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPalette
+from PyQt6.QtCore import QObject, pyqtSignal
 from mutagen.id3 import ID3, TIT2, TPE1
 from mutagen.id3 import ID3NoHeaderError
-import sys, time, os, youtube_dl, shutil
+import sys, time, os, youtube_dl, shutil, threading
 
 # https://soundcloud.com/user-353974670/likes
 
-class Pyside6App():
-    def create_pyside6_window():
+class ScraperThread(QObject, threading.Thread):
+    # Create a signal to emit when the scraping is complete
+    output_signal = pyqtSignal(str)
+    update_terminal_signal = pyqtSignal(str)
+
+    def __init__(self, url, output_signal):
+        super().__init__()
+        self.url = url
+        self.output_signal = output_signal
+
+        # Connect the update_terminal_signal to the emit_update_terminal method
+        self.update_terminal_signal.connect(self.emit_update_terminal)
+
+    def run(self):
+        output_signal = self.output_signal
+        scraper = SeleniumScraper(self.url, output_signal)
+        scraper.main(self.url, self.output_signal)
+
+    def emit_update_terminal(self, message):
+        self.output_signal.emit(message)
+
+class Pyside6App(QObject):
+    # Define a signal that will be emitted when the terminal needs to be updated
+    update_terminal_signal = pyqtSignal(str)
+
+    def __init__(self):
+        super().__init__()
+        # Get the existing QApplication object or create a new one if it doesn't exist
+        self.app = QApplication.instance() or QApplication([])
+        # Create the main window and store it in an instance variable
+        self.main_window = self.define_pyside6_window()
+        # Create a scraper thread object and store it in an instance variable
+        self.scraper_thread = ScraperThread(None, None)
+        # Connect the scraper thread's signal to the update_terminal slot
+        self.update_terminal_signal.connect(self.update_terminal)
+
+    def define_pyside6_window(self):
         # Create the dialog window
         dialog = QDialog()
         dialog.setWindowTitle("Safeguard's SoundCloud Liked Downloader")
@@ -64,8 +100,12 @@ class Pyside6App():
             if not url.startswith("https://soundcloud.com/"):
                 print("Pyside6 Window: Error - Invalid SoundCloud URL")
             else:
-                seleniumScraper = SeleniumScraper()
-                seleniumScraper.main(url)                    
+                # Create a ScraperThread and connect its scraping_complete signal to the show_info method
+                scraper_thread = ScraperThread(url, self.update_terminal_signal)
+                # Connect the scraper_thread's update_terminal signal to a lambda function that appends the message to the terminal widget
+                scraper_thread.update_terminal_signal.connect(lambda message: self.update_terminal_signal.emit(message))
+                # Start the ScraperThread
+                scraper_thread.start()               
 
         download_button = QPushButton("Download", dialog)
         download_button.setStyleSheet("""
@@ -147,6 +187,21 @@ class Pyside6App():
         """)
         info_button.clicked.connect(show_info)
 
+        # Create the terminal widget
+        terminal = QPlainTextEdit()
+        terminal.setReadOnly(True)
+        terminal.setStyleSheet("""
+            QPlainTextEdit {
+                background-color: black;
+                color: white;
+                font-family: 'Courier New', Courier, monospace;
+                font-size: 12px;
+                border: 2px solid #555555;
+                border-radius: 8px;
+                padding: 6px;
+            }
+        """)
+
         # Button layout
         button_layout = QHBoxLayout()
         button_layout.addWidget(download_button, 3)
@@ -156,23 +211,35 @@ class Pyside6App():
         layout.addWidget(url_label)
         layout.addWidget(url_input)
         layout.addLayout(button_layout)
+        # Add the output terminal widget to the layout
+        layout.addWidget(terminal)
 
         return dialog
+    
+    def update_terminal(self, output):
+        self.terminal.appendPlainText(output)
 
-    def run_pyside6_window():
-        # Create the application object
-        dialog = QApplication(sys.argv)
-        # Create the dialog window
-        dialog = Pyside6App.create_pyside6_window()
+    def run_pyside6_window(self):
         # Show the window and run the application
-        dialog.exec()
+        self.main_window.exec()
 
-class SeleniumScraper():
+class SeleniumScraper(QObject):
+    output_signal = pyqtSignal(str)
+    def __init__(self, url, output_signal):
+        super().__init__()
+        self.url = url
+        self.output = output_signal
+
+    def update_terminal(self, message):
+        self.output_signal.emit(message)
+    
     def launch_browser(url):
+        # Get the path to the chromedriver executable
+        driver_path = os.path.join(os.getcwd(), 'driver', 'chromedriver_win32', 'chromedriver')
         # Launch Chrome browser
         options = webdriver.ChromeOptions()
         options.add_experimental_option('detach', True)
-        driver = webdriver.Chrome(options=options)
+        driver = webdriver.Chrome(options=options, executable_path=driver_path)
         # Navigate to SoundCloud likes page
         driver.get(url)
 
@@ -357,8 +424,13 @@ class SeleniumScraper():
                     if artist_element is not None:
                         artist = artist_element.text.strip()
                     else:
-                        artist = "Unknown"
-                        print('Selenium Browser: Error - Artist is unknown')
+                        try:
+                            artist_element = soup.select_one('.soundTitle__username > span:nth-of-type(1)')
+                            if artist_element is not None:
+                                artist = artist_element.text.strip()
+                        except:    
+                            artist = "Unknown"
+                            print('Selenium Browser: Error - Artist is unknown')
                     # All scraped data out
                     scraped_data = f'Title: {title}\nArtist: {artist}\nLink: {link}\n'
                     print('Selenium Browser: ' + scraped_data)
@@ -445,10 +517,13 @@ class SeleniumScraper():
                 audio.save(mp3_file)
                 print(f"Metadata for {title} updated successfully!")
 
-    def main(self, url):
+    def main(self, url, output_signal):
+        self.output_signal.connect(self.output.emit)
+
         # Launch Selenium browser and load the url passed
         driver = SeleniumScraper.launch_browser(url)
         print('Script: driver is loaded')
+        self.output_signal.emit("Driver is loaded!")
         # Update the soup HTML parser
         soup = SeleniumScraper.update_soup(driver)
         print('Script: soup is updated')
@@ -469,7 +544,10 @@ class SeleniumScraper():
         # Download songs and add metadata
         SeleniumScraper.download_file_from_link(links, metadata)
         print('Script: download of songs complete')
-        time.sleep(5)
+        self.output_signal.emit("Script: download of songs complete!")
 
 if __name__ == "__main__":
-    Pyside6App.run_pyside6_window()
+    # Create the Pyside6App object
+    pyside6_app = Pyside6App()
+    # Run the PySide6 window
+    pyside6_app.run_pyside6_window()
