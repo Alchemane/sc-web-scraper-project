@@ -10,7 +10,7 @@ from PyQt6.QtCore import QObject, pyqtSignal
 from mutagen.id3 import ID3, TIT2, TPE1
 from mutagen.id3 import ID3NoHeaderError
 from selenium.webdriver.chrome.service import Service
-import time, os, youtube_dl, threading
+import time, os, youtube_dl, threading, sys
 
 # https://soundcloud.com/user-353974670/likes
 
@@ -41,6 +41,7 @@ class Pyside6App(QObject):
         super().__init__()
         # Get the existing QApplication object or create a new one if it doesn't exist
         self.app = QApplication.instance() or QApplication([])
+        self.exe_dir = getattr(sys, '_MEIPASS', os.getcwd())
         # Create the main window and store it in an instance variable
         self.main_window = self.define_pyside6_window()
         self.update_terminal_signal.connect(self.update_terminal)
@@ -57,7 +58,7 @@ class Pyside6App(QObject):
         dialog = QDialog()
         dialog.setWindowTitle("Safeguard's SoundCloud Downloader")
         # Set window icon
-        dialog.setWindowIcon(QIcon(os.path.join(os.getcwd(), 'window-icon.png')))
+        dialog.setWindowIcon(QIcon(os.path.join(self.exe_dir, 'window-icon.png')))
         # Add minimize and close buttons
         dialog.setWindowFlags(Qt.Window | Qt.WindowMinimizeButtonHint | Qt.WindowCloseButtonHint)
         # Disable window resizing
@@ -127,15 +128,14 @@ class Pyside6App(QObject):
 
         # Create the "Folder" button and connect it to a function
         def open_folder():
-            import os
-            if not self.selected_folder == None:
-                folder_path = self.selected_folder
+            if not self.selected_folder:
+                folder_path = os.path.abspath(os.path.join(self.exe_dir, "songs"))
             else:
-                try:
-                    folder_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "songs"))
-                except:
-                    self.update_terminal("Default 'songs' folder cannot be found, new download path specification required")
-            os.startfile(folder_path)
+                folder_path = self.selected_folder
+            try:
+                os.startfile(folder_path)
+            except:
+                self.update_terminal(f"'{folder_path}' Default 'songs' folder cannot be found, new download path specification required")
 
         folder_button = QPushButton("Open Folder", dialog)
         folder_button.setStyleSheet("""
@@ -245,10 +245,11 @@ class SeleniumScraper(QObject):
         self.thread_signal = thread_signal
         self.output_signal.connect(self.thread_signal)
         self.selected_folder = selected_folder
+        self.exe_dir = getattr(sys, '_MEIPASS', os.getcwd())
     
-    def launch_browser(url):
+    def launch_browser(self, url):
         # Get the path to the chromedriver executable
-        driver_path = os.path.join(os.getcwd(), 'driver', 'chromedriver_win32', 'chromedriver')
+        driver_path = os.path.join(self.exe_dir, 'driver', 'chromedriver_win32', 'chromedriver.exe')
         # Initialize the Service object
         service = Service(executable_path=driver_path)
         # Launch Chrome browser
@@ -461,12 +462,12 @@ class SeleniumScraper(QObject):
     # Download the .mp3 files from links list
     def download_file_from_link(self, links, metadata, selected_folder):
         # Set the path to the ffmpeg executable file
-        ffmpeg_path = os.path.join(os.getcwd(), 'ffmpeg-2023-04-30-git-e7c690a046-essentials_build', 'bin', 'ffmpeg.exe')
+        ffmpeg_path = os.path.join(self.exe_dir, 'ffmpeg-2023-04-30-git-e7c690a046-essentials_build', 'bin', 'ffmpeg.exe')
         
         if selected_folder is not None:
             download_path = selected_folder
         else:
-            download_path = os.path.join(os.getcwd(), 'songs')
+            download_path = os.path.join(self.exe_dir, 'songs')
         
         if not os.path.exists(download_path):            
             # Create folder to store songs
