@@ -3,9 +3,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from bs4 import BeautifulSoup
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QLineEdit, QVBoxLayout, QPushButton, QHBoxLayout, QPlainTextEdit, QFileDialog
+from PySide6.QtWidgets import QApplication, QDialog, QLineEdit, QVBoxLayout, QPushButton, QHBoxLayout, QPlainTextEdit, QFileDialog
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtGui import QColor, QPalette, QIcon
 from PyQt6.QtCore import QObject, pyqtSignal
 from mutagen.id3 import ID3, TIT2, TPE1
 from mutagen.id3 import ID3NoHeaderError
@@ -55,7 +55,11 @@ class Pyside6App(QObject):
         self.terminal = QPlainTextEdit()
         # Create the dialog window
         dialog = QDialog()
-        dialog.setWindowTitle("Safeguard's SoundCloud Liked Downloader")
+        dialog.setWindowTitle("Safeguard's SoundCloud Downloader")
+        # Set window icon
+        dialog.setWindowIcon(QIcon(os.path.join(os.getcwd(), 'window-icon.png')))
+        # Add minimize and close buttons
+        dialog.setWindowFlags(Qt.Window | Qt.WindowMinimizeButtonHint | Qt.WindowCloseButtonHint)
         # Disable window resizing
         dialog.setFixedSize(700, 300)
 
@@ -79,7 +83,7 @@ class Pyside6App(QObject):
         # Create the layout
         layout = QVBoxLayout(dialog)
 
-        # Create the URL prompt label and text input
+        # Create the URL prompt text input
         url_input = QLineEdit()
         url_input.setPlaceholderText("https://soundcloud.com/user-353974670/likes")
         url_input.setStyleSheet("color: white; background-color: black;")
@@ -127,7 +131,10 @@ class Pyside6App(QObject):
             if not self.selected_folder == None:
                 folder_path = self.selected_folder
             else:
-                folder_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "songs"))
+                try:
+                    folder_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "songs"))
+                except:
+                    self.update_terminal("Default 'songs' folder cannot be found, new download path specification required")
             os.startfile(folder_path)
 
         folder_button = QPushButton("Open Folder", dialog)
@@ -155,7 +162,7 @@ class Pyside6App(QObject):
                 self.update_terminal(f"Download path: {selected_folder}")
                 self.selected_folder = selected_folder
 
-        choose_folder_button = QPushButton("Choose Folder", dialog)
+        choose_folder_button = QPushButton("Specify Path", dialog)
         choose_folder_button.setStyleSheet("""
             QPushButton {
                 background-color: #6a41af;
@@ -174,15 +181,44 @@ class Pyside6App(QObject):
         self.terminal.setReadOnly(True)
         self.terminal.setStyleSheet("""
             QPlainTextEdit {
-                background-color: black;
+                background-color: #0f0f0f;
                 color: white;
-                font-family: 'Courier New', Courier, monospace;
+                font-family: Consolas, Courier, monospace;
                 font-size: 12px;
                 border: 2px solid #555555;
                 border-radius: 8px;
                 padding: 6px;
             }
-        """)   
+        """ + """
+            QScrollBar:vertical {
+                border: none;
+                background-color: #292829;
+                width: 14px;
+                margin: 14px 0 14px 0;
+            }
+
+            QScrollBar::handle:vertical {
+                background-color: #3a393a;
+                min-height: 30px;
+            }
+
+            QScrollBar::add-line:vertical {
+                border: none;
+                background: none;
+            }
+            QScrollBar::sub-line:vertical {
+                border: none;
+                background: none;
+            }
+            QScrollBar::add-page:vertical {
+                border: none;
+                background: none;
+            }
+            QScrollBar::sub-page:vertical {
+                border: none;
+                background: none;
+            }
+        """)
 
         # Button layout
         button_layout = QHBoxLayout()
@@ -443,7 +479,7 @@ class SeleniumScraper(QObject):
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
-                'preferredquality': '192'
+                'preferredquality': '320'
             }],
             'ffmpeg_location': ffmpeg_path
         }
@@ -506,6 +542,8 @@ class SeleniumScraper(QObject):
 if __name__ == "__main__":
     # Create the Pyside6App object
     pyside6_app = Pyside6App()
-    pyside6_app.update_terminal("Welcome >_<")
+    pyside6_app.update_terminal("(つ≧▽≦)つ Welcome~~")
+    pyside6_app.update_terminal("This tool works with liked tracks page, album playlist, and user-created playlist URLs")
+    pyside6_app.update_terminal(".mp3 files are encoded at 320 kbps")
     # Run the PySide6 window
     pyside6_app.run_pyside6_window()
