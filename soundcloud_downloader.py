@@ -249,7 +249,7 @@ class SeleniumScraper(QObject):
     
     def launch_browser(self, url):
         # Get the path to the chromedriver executable
-        driver_path = os.path.join(self.exe_dir, 'driver', 'chromedriver_win32', 'chromedriver.exe')
+        driver_path = os.path.join(self.exe_dir, 'chromedriver_win32', 'chromedriver.exe')
         # Initialize the Service object
         service = Service(executable_path=driver_path)
         # Launch Chrome browser
@@ -490,7 +490,6 @@ class SeleniumScraper(QObject):
             for link, (title, artist) in zip(reversed(links), reversed(metadata)):
                 # Replace characters that are not allowed in filenames
                 title = title.replace('/', '-').replace('\\', '-').replace(':', '-').replace('*', '-').replace('?', '-').replace('"', "'").replace('<', '-').replace('>', '-').replace('|', '-')
-
                 # Download song
                 try:
                     result = ydl.extract_info(link, download=True)
@@ -498,8 +497,7 @@ class SeleniumScraper(QObject):
                     self.output_signal.emit(f"{downloaded_file} downloaded successfully!")
                 except Exception as e:
                     self.output_signal.emit(f"Error downloading {title} by {artist}: {e}")
-                    continue
-                                  
+                    continue                                  
                 # Set metadata
                 mp3_file = downloaded_file
                 # Load the ID3 tag information from the file
@@ -512,14 +510,13 @@ class SeleniumScraper(QObject):
                 # Set the title and artist tags
                 audio['TIT2'] = TIT2(encoding=3, text=title)
                 audio['TPE1'] = TPE1(encoding=3, text=artist)
-
                 # Save the changes to the file
                 audio.save(mp3_file)
                 self.output_signal.emit(f"Metadata for {title} updated successfully!")
 
     def main(self):
         # Launch Selenium browser and load the url passed
-        driver = SeleniumScraper.launch_browser(self.url)
+        driver = SeleniumScraper.launch_browser(self, self.url)
         # Print to terminal using emit
         self.output_signal.emit("Chrome Driver instance loaded")
         # Update the soup HTML parser
