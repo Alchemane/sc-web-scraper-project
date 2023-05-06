@@ -25,7 +25,7 @@ class ScraperThread(QObject, threading.Thread):
         self.selected_folder = selected_folder
 
     def run(self):
-        self.thread_signal.emit("Scraper thread initialized")
+        self.thread_signal.emit("Scraper worker thread initialized")
         scraper = SeleniumScraper(self.url, self.thread_signal, self.selected_folder)
         # Begin main scraper download sequence
         scraper.main()
@@ -463,12 +463,10 @@ class SeleniumScraper(QObject):
     def download_file_from_link(self, links, metadata, selected_folder):
         # Set the path to the ffmpeg executable file
         ffmpeg_path = os.path.join(self.exe_dir, 'ffmpeg-2023-04-30-git-e7c690a046-essentials_build', 'bin', 'ffmpeg.exe')
-        
         if selected_folder is not None:
             download_path = selected_folder
         else:
             download_path = os.path.join(self.exe_dir, 'songs')
-        
         if not os.path.exists(download_path):            
             # Create folder to store songs
             os.makedirs(download_path)
@@ -490,6 +488,10 @@ class SeleniumScraper(QObject):
             for link, (title, artist) in zip(reversed(links), reversed(metadata)):
                 # Replace characters that are not allowed in filenames
                 title = title.replace('/', '-').replace('\\', '-').replace(':', '-').replace('*', '-').replace('?', '-').replace('"', "'").replace('<', '-').replace('>', '-').replace('|', '-')
+                
+                # Debugging statement: print the link, title, and artist to make sure they are correct
+                print(f"Downloading {title} by {artist} from {link}")
+                
                 # Download song
                 try:
                     result = ydl.extract_info(link, download=True)
@@ -497,9 +499,9 @@ class SeleniumScraper(QObject):
                     self.output_signal.emit(f"{downloaded_file} downloaded successfully!")
                 except Exception as e:
                     self.output_signal.emit(f"Error downloading {title} by {artist}: {e}")
-                    continue                                  
+                    continue                          
                 # Set metadata
-                mp3_file = downloaded_file
+                mp3_file = downloaded_file            
                 # Load the ID3 tag information from the file
                 try:
                     audio = ID3(mp3_file)
@@ -509,9 +511,10 @@ class SeleniumScraper(QObject):
 
                 # Set the title and artist tags
                 audio['TIT2'] = TIT2(encoding=3, text=title)
-                audio['TPE1'] = TPE1(encoding=3, text=artist)
+                audio['TPE1'] = TPE1(encoding=3, text=artist)               
                 # Save the changes to the file
                 audio.save(mp3_file)
+
                 self.output_signal.emit(f"Metadata for {title} updated successfully!")
 
     def main(self):
@@ -521,7 +524,7 @@ class SeleniumScraper(QObject):
         self.output_signal.emit("Chrome Driver instance loaded")
         # Update the soup HTML parser
         soup = SeleniumScraper.update_soup(self, driver)
-        self.output_signal.emit("Soup is updated")
+        self.output_signal.emit("Soup has been updated")
         # Logic for link nature
         if self.url.endswith("/likes"):
             # Scrape elements from updated soup HTML parser
@@ -529,13 +532,13 @@ class SeleniumScraper(QObject):
         elif "/sets" in self.url:
             # Scrape elements from updated soup HTML parser
             links, metadata = SeleniumScraper.extract_elements_in_playlist(self, soup, driver)
-        self.output_signal.emit("Elements are extracted")
+        self.output_signal.emit("Elements have been extracted")
         # Add link to links.txt
         SeleniumScraper.write_to_links_file(links)
-        self.output_signal.emit("Links are written to links.txt in cwd, for whatever reason")
+        self.output_signal.emit("Links have been written to links.txt in cwd, for whatever reason")
         # Download songs and add metadata
         SeleniumScraper.download_file_from_link(self, links, metadata, self.selected_folder)
-        self.output_signal.emit("Download of all songs complete")
+        self.output_signal.emit("youtube-dl download process completed")
 
 if __name__ == "__main__":
     # Create the Pyside6App object
