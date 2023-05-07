@@ -312,7 +312,7 @@ class SeleniumScraper(QObject):
                 playlist_div = song_element.find('div', {'class': 'sound playlist streamContext'})
                 # Element is a track and duplicate detection negative
                 if not playlist_div and link not in links:
-                    self.output_signal.emit("Element is a track\nDuplicate detection positive")
+                    self.output_signal.emit("Element is a track\nDuplicate detection negative")
                     # Extract title
                     title_element = song_element.select_one('.soundTitle__title')
                     if title_element is not None:
@@ -469,8 +469,7 @@ class SeleniumScraper(QObject):
             download_path = os.path.join(self.exe_dir, 'songs')
         if not os.path.exists(download_path):            
             # Create folder to store songs
-            os.makedirs(download_path)
-        
+            os.makedirs(download_path)    
         # youtube-dl options
         ydl_opts = {
             'outtmpl': os.path.join(download_path, '%(title)s.%(ext)s'),
@@ -482,16 +481,13 @@ class SeleniumScraper(QObject):
             }],
             'ffmpeg_location': ffmpeg_path
         }
-
         # Initialize YoutubeDL with the options
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             for link, (title, artist) in zip(reversed(links), reversed(metadata)):
                 # Replace characters that are not allowed in filenames
-                title = title.replace('/', '-').replace('\\', '-').replace(':', '-').replace('*', '-').replace('?', '-').replace('"', "'").replace('<', '-').replace('>', '-').replace('|', '-')
-                
+                title = title.replace('/', '-').replace('\\', '-').replace(':', '-').replace('*', '-').replace('?', '-').replace('"', "'").replace('<', '-').replace('>', '-').replace('|', '-')        
                 # Debugging statement: print the link, title, and artist to make sure they are correct
                 print(f"Downloading {title} by {artist} from {link}")
-                
                 # Download song
                 try:
                     result = ydl.extract_info(link, download=True)
@@ -501,21 +497,23 @@ class SeleniumScraper(QObject):
                     self.output_signal.emit(f"Error downloading {title} by {artist}: {e}")
                     continue                          
                 # Set metadata
-                mp3_file = downloaded_file            
-                # Load the ID3 tag information from the file
-                try:
-                    audio = ID3(mp3_file)
-                except ID3NoHeaderError:
-                    # If there is no existing ID3 tag, create a new one
-                    audio = ID3()
-
-                # Set the title and artist tags
-                audio['TIT2'] = TIT2(encoding=3, text=title)
-                audio['TPE1'] = TPE1(encoding=3, text=artist)               
-                # Save the changes to the file
-                audio.save(mp3_file)
-
-                self.output_signal.emit(f"Metadata for {title} updated successfully!")
+                mp3_file = downloaded_file
+                # Check if the downloaded file exists
+                if os.path.exists(mp3_file):
+                    # Load the ID3 tag information from the file
+                    try:
+                        audio = ID3(mp3_file)
+                    except ID3NoHeaderError:
+                        # If there is no existing ID3 tag, create a new one
+                        audio = ID3()
+                    # Set the title and artist tags
+                    audio['TIT2'] = TIT2(encoding=3, text=title)
+                    audio['TPE1'] = TPE1(encoding=3, text=artist)               
+                    # Save the changes to the file
+                    audio.save(mp3_file)
+                    self.output_signal.emit(f"Metadata for {title} updated successfully!")
+                else:
+                    self.output_signal.emit(f"File {mp3_file} does not exist. Skipping metadata update.")
 
     def main(self):
         # Launch Selenium browser and load the url passed
