@@ -374,7 +374,7 @@ class SeleniumScraper(QObject):
                                 title = "Unknown"
                                 self.output_signal.emit("Warning: title unknown")
                             # Extract artist from the soundTitle__titleContainer element
-                            artist_element = soup.select_one('.soundTitle__username > span:nth-of-type(1)')
+                            artist_element = new_soup.select_one('.soundTitle__username > span:nth-of-type(1)')
                             if artist_element is not None:
                                 artist = artist_element.text.strip()
                             else:
@@ -493,12 +493,13 @@ class SeleniumScraper(QObject):
                     result = ydl.extract_info(link, download=True)
                     downloaded_file = ydl.prepare_filename(result)
                     self.output_signal.emit(f"{downloaded_file} downloaded successfully!")
+                    time.sleep(1)
                 except Exception as e:
                     self.output_signal.emit(f"Error downloading {title} by {artist}: {e}")
                     continue                          
                 # Set metadata
                 mp3_file = downloaded_file
-                # Check if the downloaded file exists
+                # Check if the original downloaded file exists
                 if os.path.exists(mp3_file):
                     # Load the ID3 tag information from the file
                     try:
@@ -508,12 +509,28 @@ class SeleniumScraper(QObject):
                         audio = ID3()
                     # Set the title and artist tags
                     audio['TIT2'] = TIT2(encoding=3, text=title)
-                    audio['TPE1'] = TPE1(encoding=3, text=artist)               
+                    audio['TPE1'] = TPE1(encoding=3, text=artist)
                     # Save the changes to the file
                     audio.save(mp3_file)
                     self.output_signal.emit(f"Metadata for {title} updated successfully!")
                 else:
-                    self.output_signal.emit(f"File {mp3_file} does not exist. Skipping metadata update.")
+                    # Check if the converted file exists
+                    converted_file = os.path.splitext(mp3_file)[0] + '.mp3'
+                    if os.path.exists(converted_file):
+                        # Load the ID3 tag information from the file
+                        try:
+                            audio = ID3(converted_file)
+                        except ID3NoHeaderError:
+                            # If there is no existing ID3 tag, create a new one
+                            audio = ID3()
+                        # Set the title and artist tags
+                        audio['TIT2'] = TIT2(encoding=3, text=title)
+                        audio['TPE1'] = TPE1(encoding=3, text=artist)
+                        # Save the changes to the file
+                        audio.save(converted_file)
+                        self.output_signal.emit(f"Metadata for {title} updated successfully!")
+                    else:
+                        self.output_signal.emit(f"Error adding metadata to {mp3_file}: file not found")
 
     def main(self):
         # Launch Selenium browser and load the url passed
