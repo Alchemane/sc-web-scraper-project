@@ -135,7 +135,7 @@ class Pyside6App(QObject):
             try:
                 os.startfile(folder_path)
             except:
-                self.update_terminal(f"'{folder_path}' Default 'songs' folder cannot be found, new download path specification required")
+                self.update_terminal(f"'{folder_path}' Default 'songs' folder cannot be found, new download path specification required, or run the downloader to create default 'songs' folder in the project path.")
 
         folder_button = QPushButton("Open Folder", dialog)
         folder_button.setStyleSheet("""
@@ -269,19 +269,20 @@ class SeleniumScraper(QObject):
         self.output_signal.emit("Cookies accepted")
         time.sleep(1)
 
-        # Auto-scroll to the bottom of the page to load all dynamically loaded elements
-        last_height = driver.execute_script("return document.body.scrollHeight")
-        while True:
-            driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-
-            # This sleep value will be dependent on internet speed of the user
-            time.sleep(3)
-            new_height = driver.execute_script("return document.body.scrollHeight")
-            self.output_signal.emit(f"Scrolled to position {new_height}")
-            if new_height == last_height:
-                break
-            last_height = new_height
-        time.sleep(1)
+        # Only automate vertical navigation if multiple elements 
+        if self.url.endswith('/likes') or '/sets' in self.url:
+            # Auto-scroll to the bottom of the page to load all dynamically loaded elements
+            last_height = driver.execute_script("return document.body.scrollHeight")
+            while True:
+                driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+                # This sleep value will be dependent on internet speed of the user
+                time.sleep(3)
+                new_height = driver.execute_script("return document.body.scrollHeight")
+                self.output_signal.emit(f"Scrolled to position {new_height}")
+                if new_height == last_height:
+                    break
+                last_height = new_height
+            time.sleep(1)
 
         # Retrieve page source
         html_source = driver.page_source
@@ -317,6 +318,10 @@ class SeleniumScraper(QObject):
                     title_element = song_element.select_one('.soundTitle__title')
                     if title_element is not None:
                         title = title_element.text.strip()
+                        if title == '\u200e' or title == '\u200b':
+                            title = link.split('/')[-1]
+                        else:
+                            title = title_element.text.strip()
                     else:
                         title = "Unknown"
                         self.output_signal.emit("Warning: title unknown")
@@ -370,11 +375,15 @@ class SeleniumScraper(QObject):
                             title_element = new_song_element.select_one('.trackItem__trackTitle')
                             if title_element is not None:
                                 title = title_element.text.strip()
+                                if title == '\u200e' or title == '\u200b':
+                                    title = link.split('/')[-1]
+                                else:
+                                    title = title_element.text.strip()
                             else:
                                 title = "Unknown"
                                 self.output_signal.emit("Warning: title unknown")
                             # Extract artist from the soundTitle__titleContainer element
-                            artist_element = new_soup.select_one('.soundTitle__username > span:nth-of-type(1)')
+                            artist_element = new_soup.select_one('.soundTitle__username > a')
                             if artist_element is not None:
                                 artist = artist_element.text.strip()
                             else:
@@ -390,8 +399,6 @@ class SeleniumScraper(QObject):
                         else:
                             # Duplicate detection positive
                             self.output_signal.emit(f"{title} detected as a duplicate element. Skipping...\n")
-                             
-
                 # Close new tab
                 if driver.current_window_handle != original_window:
                     driver.close()
@@ -426,6 +433,8 @@ class SeleniumScraper(QObject):
                     title_element = song_element.select_one('.trackItem__trackTitle')
                     if title_element is not None:
                         title = title_element.text.strip()
+                        if title == '\u200e' or title == '\u200b':
+                            title = link.split('/')[-1]
                     else:
                         title = "Unknown"
                         self.output_signal.emit("Warning: title unkown")
@@ -434,7 +443,7 @@ class SeleniumScraper(QObject):
                     if artist_element is not None:
                         artist = artist_element.text.strip()
                     else:
-                        artist_element = song_element.select_one('.soundTitle__username > span:nth-of-type(1)')
+                        artist_element = song_element.select_one('.soundTitle__username > a')
                         if artist_element is not None:
                             artist = artist_element.text.strip()
                         else:
@@ -451,13 +460,39 @@ class SeleniumScraper(QObject):
                     # Duplicate detection positive
                     self.output_signal.emit(f"{link} detected as a duplicate element. Skipping...\n")
 
-        return links, metadata    
+        return links, metadata   
 
-    # Write data to files
-    def write_to_links_file(links):
-        with open('links.txt', 'w') as l:
-            for link in links:
-                l.write(link + '\n')
+    def extract_single_track_link(self, soup, driver):
+        with driver:
+            # Links and metadata lists
+            links = []
+            metadata = []
+
+            # Extract title
+            title_element = soup.select_one('.soundTitle__title')
+            if title_element is not None:
+                title = title_element.text.strip()
+                if title == '\u200e' or title == '\u200b':
+                    title = self.url.split('/')[-1]
+            else:
+                title = "Unknown"
+                self.output_signal.emit("Warning: title unkown")
+            # Extract artist from the soundTitle__titleContainer element
+            artist_element = soup.select_one('.soundTitle__username')
+            if artist_element is not None:
+                artist = artist_element.text.strip()
+            else:
+                artist = "Unknown"
+                self.output_signal.emit("Warning: artist unkown")
+            # All scraped data out
+            scraped_data = f'Title: {title}\nArtist: {artist}\nLink: {self.url}\n'
+            self.output_signal.emit(scraped_data)
+
+            # Append link and metadata of track to be downloaded
+            links.append(self.url)
+            metadata.append((title, artist))
+
+        return links, metadata
 
     # Download the .mp3 files from links list
     def download_file_from_link(self, links, metadata, selected_folder):
@@ -472,22 +507,20 @@ class SeleniumScraper(QObject):
             os.makedirs(download_path)    
         # youtube-dl options
         ydl_opts = {
-            'outtmpl': os.path.join(download_path, '%(title)s.%(ext)s'),
+            # File name is title, unique ID of media for error prevention for duplicate tracks and ZeroWidthSpace; names, and the extension.
+            'outtmpl': os.path.join(download_path, '%(title)s [id=%(id)s].%(ext)s'),
             'format': 'bestaudio/best',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
                 'preferredquality': '320'
             }],
-            'ffmpeg_location': ffmpeg_path
+            'ffmpeg_location': ffmpeg_path,
         }
-        # Initialize YoutubeDL with the options
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             for link, (title, artist) in zip(reversed(links), reversed(metadata)):
                 # Replace characters that are not allowed in filenames
-                title = title.replace('/', '-').replace('\\', '-').replace(':', '-').replace('*', '-').replace('?', '-').replace('"', "'").replace('<', '-').replace('>', '-').replace('|', '-')        
-                # Debugging statement: print the link, title, and artist to make sure they are correct
-                print(f"Downloading {title} by {artist} from {link}")
+                title = title.replace('/', '-').replace('\\', '-').replace(':', '-').replace('*', '-').replace('?', '-').replace('"', "'").replace('<', '-').replace('>', '-').replace('|', '-')
                 # Download song
                 try:
                     result = ydl.extract_info(link, download=True)
@@ -496,7 +529,7 @@ class SeleniumScraper(QObject):
                     time.sleep(1)
                 except Exception as e:
                     self.output_signal.emit(f"Error downloading {title} by {artist}: {e}")
-                    continue                          
+                    continue                      
                 # Set metadata
                 mp3_file = downloaded_file
                 # Check if the original downloaded file exists
@@ -541,25 +574,27 @@ class SeleniumScraper(QObject):
         soup = SeleniumScraper.update_soup(self, driver)
         self.output_signal.emit("Soup has been updated")
         # Logic for link nature
-        if self.url.endswith("/likes"):
+        if self.url.endswith('/likes'):
             # Scrape elements from updated soup HTML parser
             links, metadata = SeleniumScraper.extract_elements_in_liked(self, soup, driver)
-        elif "/sets" in self.url:
+        elif '/sets' in self.url:
             # Scrape elements from updated soup HTML parser
             links, metadata = SeleniumScraper.extract_elements_in_playlist(self, soup, driver)
+        else:
+            # Scrape element from updated soup HTML parser
+            links, metadata = SeleniumScraper.extract_single_track_link(self, soup, driver)
         self.output_signal.emit("Elements have been extracted")
-        # Add link to links.txt
-        SeleniumScraper.write_to_links_file(links)
-        self.output_signal.emit("Links have been written to links.txt in cwd, for whatever reason")
         # Download songs and add metadata
         SeleniumScraper.download_file_from_link(self, links, metadata, self.selected_folder)
-        self.output_signal.emit("youtube-dl download process completed")
+        self.output_signal.emit("(〜￣△￣)〜♪♫♬	 youtube-dl download process completed!~~")
+        self.output_signal.emit("------------------------------\n")
 
 if __name__ == "__main__":
     # Create the Pyside6App object
     pyside6_app = Pyside6App()
-    pyside6_app.update_terminal("(つ≧▽≦)つ Welcome~~")
-    pyside6_app.update_terminal("This tool works with liked tracks page, album playlist, and user-created playlist URLs")
+    pyside6_app.update_terminal("(つ≧▽≦)つ⌒･*:.｡. .｡.:*･゜ﾟ･*☆ Welcome~~")
+    pyside6_app.update_terminal("This tool works with liked tracks page, album and user-created playlists, and single tracks")
     pyside6_app.update_terminal(".mp3 files are encoded at 320 kbps")
+    pyside6_app.update_terminal("------------------------------\n")
     # Run the PySide6 window
     pyside6_app.run_pyside6_window()
